@@ -1,52 +1,57 @@
-# model settings
-norm_cfg = dict(type='SyncBN', requires_grad=True)
-data_preprocessor = dict(
-    type='SegDataPreProcessor',
-    mean=[123.675, 116.28, 103.53],
-    std=[58.395, 57.12, 57.375],
-    bgr_to_rgb=True,
-    pad_val=0,
-    seg_pad_val=255)
+# 模型设置
+norm_cfg = dict(type='SyncBN', requires_grad=True)  # 分割框架通常使用 SyncBN
+data_preprocessor = dict(  # 数据预处理的配置项，通常包括图像的归一化和增强
+    type='SegDataPreProcessor',  # 数据预处理的类型
+    mean=[123.675, 116.28, 103.53],  # 用于归一化输入图像的平均值
+    std=[58.395, 57.12, 57.375],  # 用于归一化输入图像的标准差
+    bgr_to_rgb=True,  # 是否将图像从 BGR 转为 RGB
+    pad_val=0,  # 图像的填充值
+    seg_pad_val=255)  # 'gt_seg_map'的填充值
 model = dict(
-    type='EncoderDecoder',
+    type='EncoderDecoder',  # 分割器(segmentor)的名字
     data_preprocessor=data_preprocessor,
-    pretrained='open-mmlab://resnet50_v1c',
+    pretrained='open-mmlab://resnet50_v1c',  # 加载使用 ImageNet 预训练的主干网络
     backbone=dict(
-        type='ResNetV1c',
-        depth=50,
-        num_stages=4,
-        out_indices=(0, 1, 2, 3),
-        dilations=(1, 1, 2, 4),
-        strides=(1, 2, 1, 1),
-        norm_cfg=norm_cfg,
-        norm_eval=False,
-        style='pytorch',
-        contract_dilation=True),
+        type='ResNetV1c',  # 主干网络的类别，更多细节请参考 mmseg/models/backbones/resnet.py
+        depth=50,  # 主干网络的深度，通常为 50 和 101
+        num_stages=4,  # 主干网络状态(stages)的数目
+        out_indices=(0, 1, 2, 3),  # 每个状态(stage)产生的特征图输出的索引
+        dilations=(1, 1, 2, 4),  # 每一层(layer)的空心率(dilation rate)
+        strides=(1, 2, 1, 1),  # 每一层(layer)的步长(stride)
+        norm_cfg=norm_cfg,  # 归一化层(norm layer)的配置项
+        norm_eval=False,  # 是否冻结 BN 里的统计项
+        style='pytorch',  # 主干网络的风格，'pytorch' 意思是步长为2的层为 3x3 卷积， 'caffe' 意思是步长为2的层为 1x1 卷积
+        contract_dilation=True),  # 当空洞率 > 1, 是否压缩第一个空洞层
     decode_head=dict(
-        type='PSPHead',
-        in_channels=2048,
-        in_index=3,
-        channels=512,
-        pool_scales=(1, 2, 3, 6),
-        dropout_ratio=0.1,
-        num_classes=19,
-        norm_cfg=norm_cfg,
-        align_corners=False,
-        loss_decode=dict(
-            type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0)),
+        type='PSPHead',  # 解码头(decode head)的类别。可用选项请参 mmseg/models/decode_heads
+        in_channels=2048,  # 解码头的输入通道数
+        in_index=3,  # 被选择特征图(feature map)的索引
+        channels=512,  # 解码头中间态(intermediate)的通道数
+        pool_scales=(1, 2, 3, 6),  # PSPHead 平均池化(avg pooling)的规模(scales)。 细节请参考文章内容
+        dropout_ratio=0.1,  # 进入最后分类层(classification layer)之前的 dropout 比例
+        num_classes=19,  # 分割前景的种类数目。 通常情况下，cityscapes 为19，VOC为21，ADE20k 为150
+        norm_cfg=norm_cfg,  # 归一化层的配置项
+        align_corners=False,  # 解码过程中调整大小(resize)的 align_corners 参数
+        loss_decode=dict(  # 解码头(decode_head)里的损失函数的配置项
+            type='CrossEntropyLoss',  # 分割时使用的损失函数的类别
+            use_sigmoid=False,  # 分割时是否使用 sigmoid 激活
+            loss_weight=1.0)),  # 解码头的损失权重
     auxiliary_head=dict(
-        type='FCNHead',
-        in_channels=1024,
-        in_index=2,
-        channels=256,
-        num_convs=1,
-        concat_input=False,
-        dropout_ratio=0.1,
-        num_classes=19,
-        norm_cfg=norm_cfg,
-        align_corners=False,
-        loss_decode=dict(
-            type='CrossEntropyLoss', use_sigmoid=False, loss_weight=0.4)),
-    # model training and testing settings
-    train_cfg=dict(),
-    test_cfg=dict(mode='whole'))
+        type='FCNHead',  # 辅助头(auxiliary head)的种类。可用选项请参考 mmseg/models/decode_heads
+        in_channels=1024,  # 辅助头的输入通道数
+        in_index=2,  # 被选择的特征图(feature map)的索引
+        channels=256,  # 辅助头中间态(intermediate)的通道数
+        num_convs=1,  # FCNHead 里卷积(convs)的数目，辅助头中通常为1
+        concat_input=False,  # 在分类层(classification layer)之前是否连接(concat)输入和卷积的输出
+        dropout_ratio=0.1,  # 进入最后分类层(classification layer)之前的 dropout 比例
+        num_classes=19,  # 分割前景的种类数目。 通常情况下，cityscapes 为19，VOC为21，ADE20k 为150
+        norm_cfg=norm_cfg,  # 归一化层的配置项
+        align_corners=False,  # 解码过程中调整大小(resize)的 align_corners 参数
+        loss_decode=dict(  # 辅助头(auxiliary head)里的损失函数的配置项
+            type='CrossEntropyLoss',  # 分割时使用的损失函数的类别
+            use_sigmoid=False,  # 分割时是否使用 sigmoid 激活
+            loss_weight=0.4)),  # 辅助头损失的权重，默认设置为0.4
+    # 模型训练和测试设置项
+    train_cfg=dict(),  # train_cfg 当前仅是一个占位符
+    test_cfg=dict(
+        mode='whole'))  # 测试模式，可选参数为 'whole' 和 'slide'. 'whole': 在整张图像上全卷积(fully-convolutional)测试。 'slide': 在输入图像上做滑窗预测
